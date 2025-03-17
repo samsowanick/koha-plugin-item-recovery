@@ -27,21 +27,25 @@ use C4::Auth;
 use C4::Context;
 use Koha::DateUtils qw( dt_from_string );
 use Data::Dumper;
+use Koha::SearchEngine::Elasticsearch::Indexer;
+use Koha::SearchEngine::Zebra::Indexer;
+use Koha::SearchEngine;
+use Koha::Biblios;
+use Koha::Biblio;
 
-our $VERSION = 0.6;
+
+our $VERSION = 0.8;
 our $metadata = {
 	name            => 'UndeleteRecords',
-	author          => 'David Bourgault',
+	author          => 'David Bourgault, Olivier Vézina, William Lavoie',
 	description     => 'Undelete records',
 	date_authored   => '2017-11-15',
-	date_updated    => '2022-11-04',
+	date_updated    => '2025-03-17',
 	minimum_version => '22.05',
 	maximum_version => undef,
 	version         => $VERSION,
 };
-
 our $dbh = C4::Context->dbh();
-
 sub new {
 	my ( $class, $args ) = @_;
 	$args->{metadata} = $metadata;
@@ -58,6 +62,8 @@ sub tool {
 	if ( $cgi->param('action') eq 'calculate') {
 		$self->calculate(
 			$cgi->param('target'),
+            $cgi->param('RecordsType'),
+            $cgi->param('ItemsType'),
             $cgi->param('FromDate'),
             $cgi->param('ToDate'),
             $cgi->param('test[]')
@@ -66,6 +72,7 @@ sub tool {
 	elsif ( $cgi->param('action') eq 'merge' and $cgi->param('confirm') eq 'confirm' ) {
 		$self->fusion(
 			$cgi->param('target'),
+            $cgi->param('Type'),
             $cgi->param('selected_itemnumbers[]'),
 		);
 	}
@@ -99,26 +106,40 @@ sub home {
 }
 
 sub calculate {
-	my $self = shift;
+    my $self = shift;
 	my $target = shift;
+    my $Type = shift or undef;
     my $FromDate = dt_from_string(shift);
     my $ToDate = dt_from_string(shift);
 	my $cgi = $self->{cgi};
 	my $template = $self->tmpl;
-    my $all_deleted_sql = "SELECT deleteditems.itemnumber, deleteditems.barcode, COALESCE(deletedbiblio.title,biblio.title),
-            COALESCE(deletedbiblio.author, biblio.author), COALESCE(deletedbiblioitems.isbn, biblioitems.isbn), 
-            deleteditems.biblionumber, deleteditems.timestamp, IF(deleteditems.barcode 
+    my $all_deleted_sql = "";
+
+    if($Type eq "Records"){
+        $all_deleted_sql = "SELECT deletedbiblio.biblionumber, COALESCE(deletedbiblio.author, biblio.author),
+        COALESCE(deletedbiblio.title,biblio.title),  COALESCE(deletedbiblioitems.isbn, deletedbiblioitems.isbn),
+        COALESCE(deletedbiblioitems.issn, deletedbiblioitems.issn), deletedbiblio.timestamp, deletedbiblio.datecreated
+        FROM deletedbiblio
+        LEFT JOIN biblio ON deletedbiblio.biblionumber = biblio.biblionumber
+        LEFT JOIN deletedbiblioitems ON deletedbiblio.biblionumber = deletedbiblioitems.biblionumber
+        WHERE deletedbiblio.timestamp >= '$FromDate'
+            AND deletedbiblio.timestamp <= IF('$ToDate' LIKE '' AND '$FromDate' NOT LIKE '', NOW(), DATE_ADD('$ToDate', INTERVAL 1 DAY));";
+    }elsif($Type eq "Items"){
+        $all_deleted_sql = "SELECT deleteditems.itemnumber, deleteditems.barcode, COALESCE(deletedbiblio.title,biblio.title),
+            COALESCE(deletedbiblio.author, biblio.author), COALESCE(deletedbiblioitems.isbn, deletedbiblioitems.isbn),
+            COALESCE(deletedbiblioitems.issn, deletedbiblioitems.issn), deleteditems.biblionumber, deleteditems.timestamp, IF(deleteditems.barcode
             IN (
-                SELECT items.barcode 
+                SELECT items.barcode
                 FROM items
                 ), '*', '')
         FROM deleteditems
-        LEFT JOIN deletedbiblioitems ON deleteditems.biblionumber = deletedbiblioitems.biblionumber 
+        LEFT JOIN deletedbiblioitems ON deleteditems.biblionumber = deletedbiblioitems.biblionumber
         LEFT JOIN deletedbiblio ON deleteditems.biblionumber = deletedbiblio.biblionumber
         LEFT JOIN biblio ON deleteditems.biblionumber = biblio.biblionumber
         LEFT JOIN biblioitems ON deleteditems.biblionumber = biblioitems.biblionumber
-        WHERE deleteditems.timestamp >= '$FromDate' 
+        WHERE deleteditems.timestamp >= '$FromDate'
             AND deleteditems.timestamp <= IF('$ToDate' LIKE '' AND '$FromDate' NOT LIKE '', NOW(), DATE_ADD('$ToDate', INTERVAL 1 DAY));";
+    }
     # FIXME: prepared statement inutile/mal fait
     my $sth = $dbh->prepare($all_deleted_sql);
     $sth->execute();
@@ -127,37 +148,60 @@ sub calculate {
     my @all_title = ( );
     my @all_author = ( );
     my @all_isbn = ( );
+    my @all_issn = ( );
     my @all_biblio = ( );
     my @all_timestamp = ( );
     my @all_issimilarbarcode = ( );
-    while(my @row = $sth->fetchrow_array()){
-        push(@all_itemnumber, $row[0]);
-        push(@all_barcode, $row[1]);
-        push(@all_title, $row[2]);
-        push(@all_author, $row[3]);
-        push(@all_isbn, $row[4]);
-        push(@all_biblio, $row[5]);
-        push(@all_timestamp, $row[6]);
-        push(@all_issimilarbarcode, $row[7]);
+    my @all_creationTime = ( );
+    my $numberitems;
+    if($Type eq "Records"){
+      while(my @row = $sth->fetchrow_array()){
+            push(@all_biblio, $row[0]);
+            push(@all_author, $row[1]);
+            push(@all_title, $row[2]);
+            push(@all_isbn, $row[3]);
+            push(@all_issn, $row[4]);
+            push(@all_timestamp, $row[5]);
+            push(@all_creationTime, $row[6]);
+        }
+
+        $numberitems = scalar @all_biblio;
+    }elsif($Type eq "Items"){
+        while(my @row = $sth->fetchrow_array()){
+            push(@all_itemnumber, $row[0]);
+            push(@all_barcode, $row[1]);
+            push(@all_title, $row[2]);
+            push(@all_author, $row[3]);
+            push(@all_isbn, $row[4]);
+            push(@all_issn, $row[5]);
+            push(@all_biblio, $row[6]);
+            push(@all_timestamp, $row[7]);
+            push(@all_issimilarbarcode, $row[8]);
+        }
+
+        $numberitems = scalar @all_itemnumber;
     }
 
-    $template->param(
-		target => $target,
-        all_itemnumbers => \@all_itemnumber,
-        all_barcodes => \@all_barcode,
-        all_titles => \@all_title,
-        all_authors => \@all_author,
-        all_isbn => \@all_isbn,
-        all_biblionumbers => \@all_biblio,
-        all_timestamps => \@all_timestamp,
-        all_issimilarbarcode => \@all_issimilarbarcode,
-        from_date => $FromDate,
-        to_date => $ToDate
-    );
+        $template->param(
+            target => $target,
+            type=>$Type,
+            all_biblionumbers => \@all_biblio,
+            all_itemnumbers => \@all_itemnumber,
+            all_barcodes => \@all_barcode,
+            all_authors => \@all_author,
+            all_titles => \@all_title,
+            all_timestamps => \@all_timestamp,
+            all_creationTime => \@all_creationTime,
+            all_issimilarbarcode => \@all_issimilarbarcode,
+            all_isbn => \@all_isbn,
+            all_issn => \@all_issn,
+            from_date => $FromDate,
+            to_date => $ToDate
+        );
+
 
 	print $cgi->header(-type => 'text/html',-charset => 'utf-8');
 	print $template->output();
-    my $numberitems = scalar @all_itemnumber;
 
     return $numberitems;
 }
@@ -165,6 +209,7 @@ sub calculate {
 sub fusion {
 	my $self = shift;
 	my $target = shift;
+    my $Type = shift;
     my @selected_itemnumbers = @_ or undef;
 	my $cgi = $self->{cgi};
 	my $template = $self->tmpl;
@@ -172,9 +217,16 @@ sub fusion {
     $itemnumbers_sql = "''" unless $itemnumbers_sql;
     my @selected_biblionumbers = ( );
     my @selected_count = ( );
-    my $undeleted_biblionumbers_sql = "SELECT biblionumber, count(*) FROM deleteditems WHERE itemnumber IN(";
+    my $undeleted_biblionumbers_sql = undef;
+    if($Type eq "Records"){
+        $undeleted_biblionumbers_sql = "SELECT biblionumber, count(*) FROM deletedbiblio WHERE biblionumber IN(";
+    }
+    else{
+        $undeleted_biblionumbers_sql = "SELECT biblionumber, count(*) FROM deleteditems WHERE itemnumber IN(";
+    }
     $undeleted_biblionumbers_sql .= $itemnumbers_sql;
     $undeleted_biblionumbers_sql .= ") GROUP BY biblionumber;";
+
     # FIXME: prepared statement inutile/mal fait
     my $sth = $dbh->prepare($undeleted_biblionumbers_sql);
     $sth->execute();
@@ -187,119 +239,220 @@ sub fusion {
         selected_count => \@selected_count
     );
 
-    #INSERT
-    $dbh->do("INSERT INTO biblio
-        SELECT *
-        FROM deletedbiblio
-        WHERE deletedbiblio.biblionumber IN (SELECT biblionumber FROM deleteditems 
-        WHERE itemnumber IN ($itemnumbers_sql))
-            AND deletedbiblio.biblionumber
+    if($Type eq "Items"){
+        #INSERT
+        $dbh->do("INSERT INTO biblio
+            SELECT *
+            FROM deletedbiblio
+            WHERE deletedbiblio.biblionumber IN (SELECT biblionumber FROM deleteditems
+            WHERE itemnumber IN ($itemnumbers_sql))
+                AND deletedbiblio.biblionumber
+                    NOT IN (
+                            SELECT biblionumber
+                            FROM biblio)
+        ;");
+        $dbh->do("INSERT INTO biblioitems
+            SELECT *
+            FROM deletedbiblioitems
+            WHERE deletedbiblioitems.biblionumber
+                IN (
+                    SELECT biblionumber
+                    FROM deleteditems
+                    WHERE itemnumber IN ($itemnumbers_sql)
+                    )
+                AND deletedbiblioitems.biblioitemnumber
                 NOT IN (
-                        SELECT biblionumber
-                        FROM biblio)
-    ;");
-     
-    $dbh->do("INSERT INTO biblioitems
-        SELECT *
-        FROM deletedbiblioitems 
-        WHERE deletedbiblioitems.biblionumber
-            IN (
-                SELECT biblionumber 
-                FROM deleteditems 
-                WHERE itemnumber IN ($itemnumbers_sql)
-                ) 
-            AND deletedbiblioitems.biblionumber
-            NOT IN (
-                    SELECT biblionumber 
-                    FROM biblioitems
-                    )
-    ;");
-    
-    $dbh->do("INSERT INTO biblio_metadata(biblionumber,format,`schema`,metadata)
-        SELECT biblionumber,format,`schema`,metadata
-        FROM deletedbiblio_metadata 
-        WHERE deletedbiblio_metadata.biblionumber
-            IN (
-                SELECT biblionumber 
-                FROM deleteditems 
-                WHERE itemnumber IN ($itemnumbers_sql)
-                ) 
-            AND deletedbiblio_metadata.biblionumber
-            NOT IN (
-                    SELECT biblionumber 
-                    FROM biblio_metadata
-                    )
-    ;");
-    
-    $dbh->do("UPDATE deleteditems
-        SET barcode = IF(barcode
-            IN (
-                SELECT barcode
-                FROM items
-                ),
-            CONCAT(barcode, '_1'), barcode)
-        WHERE deleteditems.itemnumber IN ($itemnumbers_sql)
-    ;");
-    $dbh->do("INSERT INTO items 
-        SELECT *
-        FROM deleteditems 
-        WHERE deleteditems.itemnumber IN ($itemnumbers_sql)
-    ;");
- 
-    #DELETE
-    $dbh->do("DELETE FROM deleteditems 
-        WHERE deleteditems.itemnumber IN ($itemnumbers_sql)
-    ;");
-
-    $dbh->do("DELETE FROM deletedbiblioitems 
-        WHERE deletedbiblioitems.biblionumber
-            IN (
-                SELECT biblionumber 
-                FROM items 
-                WHERE itemnumber IN ($itemnumbers_sql)) 
-                    AND deletedbiblioitems.biblionumber 
-                    IN (
-                        SELECT biblionumber 
+                        SELECT biblioitemnumber
                         FROM biblioitems
                         )
-    ;");
-
-    $dbh->do("DELETE FROM deletedbiblio_metadata 
-        WHERE deletedbiblio_metadata.biblionumber
-            IN (
-                SELECT biblionumber 
-                FROM items 
-                WHERE itemnumber IN ($itemnumbers_sql)) 
-                    AND deletedbiblio_metadata.biblionumber 
-                    IN (
-                        SELECT biblionumber 
+        ;");
+        $dbh->do("INSERT INTO biblio_metadata(biblionumber,format,`schema`,metadata)
+            SELECT biblionumber,format,`schema`,metadata
+            FROM deletedbiblio_metadata
+            WHERE deletedbiblio_metadata.biblionumber
+                IN (
+                    SELECT biblionumber
+                    FROM deleteditems
+                    WHERE itemnumber IN ($itemnumbers_sql)
+                    )
+                AND deletedbiblio_metadata.biblionumber
+                NOT IN (
+                        SELECT biblionumber
                         FROM biblio_metadata
                         )
-    ;");
+        ;");
+        $dbh->do("UPDATE deleteditems
+            SET barcode = IF(barcode
+                IN (
+                    SELECT barcode
+                    FROM items
+                    ),
+                CONCAT(barcode, '_1'), barcode)
+            WHERE deleteditems.itemnumber IN ($itemnumbers_sql)
+        ;");
+        $dbh->do("INSERT INTO items
+            SELECT *
+            FROM deleteditems
+            WHERE deleteditems.itemnumber IN ($itemnumbers_sql)
+        ;");
+        #DELETE
+        $dbh->do("DELETE FROM deleteditems
+            WHERE deleteditems.itemnumber IN ($itemnumbers_sql)
+        ;");
+        $dbh->do("DELETE FROM deletedbiblioitems
+            WHERE deletedbiblioitems.biblionumber
+                IN (
+                    SELECT biblionumber
+                    FROM items
+                    WHERE itemnumber IN ($itemnumbers_sql))
+                        AND deletedbiblioitems.biblionumber
+                        IN (
+                            SELECT biblionumber
+                            FROM biblioitems
+                            )
+        ;");
+        $dbh->do("DELETE FROM deletedbiblio_metadata
+            WHERE deletedbiblio_metadata.biblionumber
+                IN (
+                    SELECT biblionumber
+                    FROM items
+                    WHERE itemnumber IN ($itemnumbers_sql))
+                        AND deletedbiblio_metadata.biblionumber
+                        IN (
+                            SELECT biblionumber
+                            FROM biblio_metadata
+                            )
+        ;");
+        $dbh->do("DELETE FROM deletedbiblio
+            WHERE deletedbiblio.biblionumber
+                IN (
+                    SELECT biblionumber
+                    FROM items
+                    WHERE itemnumber IN ($itemnumbers_sql))
+                        AND deletedbiblio.biblionumber
+                        IN (
+                            SELECT biblionumber
+                            FROM biblio
+                            )
+        ;");
+    }
+    elsif($Type eq "Records"){
 
-    $dbh->do("DELETE FROM deletedbiblio 
-        WHERE deletedbiblio.biblionumber
-            IN (
-                SELECT biblionumber 
-                FROM items 
-                WHERE itemnumber IN ($itemnumbers_sql)) 
-                    AND deletedbiblio.biblionumber 
+         $dbh->do("INSERT INTO biblio
+            SELECT *
+            FROM deletedbiblio
+            WHERE deletedbiblio.biblionumber IN ($itemnumbers_sql) AND
+                    deletedbiblio.biblionumber NOT IN (
+                            SELECT biblionumber
+                            FROM biblio)
+        ;");
+
+        $dbh->do("INSERT INTO biblioitems
+            SELECT *
+            FROM deletedbiblioitems
+            WHERE deletedbiblioitems.biblionumber
+                IN ($itemnumbers_sql)
+                AND deletedbiblioitems.biblioitemnumber
+                NOT IN (
+                        SELECT biblioitemnumber
+                        FROM biblioitems
+                        )
+        ;");
+
+
+        $dbh->do("INSERT INTO biblio_metadata(biblionumber,format,`schema`,metadata)
+            SELECT biblionumber,format,`schema`,metadata
+            FROM deletedbiblio_metadata
+            WHERE deletedbiblio_metadata.biblionumber
+                IN (
+                    SELECT biblionumber
+                    FROM deletedbiblio
+                    WHERE biblionumber IN ($itemnumbers_sql)
+                    )
+                AND deletedbiblio_metadata.biblionumber
+                NOT IN (
+                        SELECT biblionumber
+                        FROM biblio_metadata
+                        )
+        ;");
+
+        $dbh->do("DELETE FROM deletedbiblioitems
+            WHERE deletedbiblioitems.biblionumber
+                IN ($itemnumbers_sql)
+            AND deletedbiblioitems.biblionumber
+                IN (
+                    SELECT biblionumber
+                    FROM biblioitems
+                    )
+        ;");
+
+
+        $dbh->do("DELETE FROM deletedbiblio_metadata
+            WHERE deletedbiblio_metadata.biblionumber
+                IN (
+                    SELECT biblionumber
+                    FROM biblio
+                    WHERE biblionumber IN ($itemnumbers_sql)
+                    )
+                AND deletedbiblio_metadata.biblionumber
                     IN (
-                        SELECT biblionumber 
+                        SELECT biblionumber
+                        FROM biblio_metadata
+                        )
+        ;");
+
+        $dbh->do("DELETE FROM deletedbiblio
+            WHERE deletedbiblio.biblionumber
+                    IN (
+                        SELECT biblionumber
                         FROM biblio
                         )
-    ;");
+        ;");
+
+    }
 
 	print $cgi->header(-type => 'text/html',-charset => 'utf-8');
 	print $template->output();
+
+    my $search_engine = C4::Context->preference("SearchEngine");
+
+    # Retrieve all biblionumbers
+    my @biblio_ids = Koha::Biblios->search()->get_column('biblionumber');
+
+    # Fetch all records by looping through the biblionumbers
+    my @records;
+    foreach (@biblio_ids) {
+        my $biblio = Koha::Biblios->find($_);
+        if ($biblio) {
+            my $marc_record = $biblio->record();
+            if ($marc_record) {
+                push @records, $marc_record;
+            } else {
+                warn "Failed to retrieve MARC record for biblionumber $_";
+            }
+        } else {
+            warn "Failed to retrieve biblio record for biblionumber $_";
+        }
+    }
+
+    if ($search_engine eq 'Zebra') {
+        my $zebra_indexer = Koha::SearchEngine::Zebra::Indexer->new({ index => $Koha::SearchEngine::BIBLIOS_INDEX});
+        # Reindex the retrieved records
+        $zebra_indexer->index_records(\@biblio_ids, "update", "biblioserver", undef);
+    }
+    elsif ($search_engine eq 'Elasticsearch') {
+        my $elastic_indexer = Koha::SearchEngine::Elasticsearch::Indexer->new({ index => $Koha::SearchEngine::BIBLIOS_INDEX});
+        # Reindex the retrieved records
+        $elastic_indexer->update_index(\@biblio_ids, \@records);
+    }
+    else {
+        die "Unknown search engine: $search_engine. Unable to reindex.";
+    }
 }
+
 
 #Supprimer le plugin avec toutes ses données
 sub uninstall() {
     my ( $self, $args ) = @_;
-    my $table = $self->get_qualified_table_name('mytable');
-
-    return C4::Context->dbh->do("DROP TABLE $table");
+    return 1; # succès
 }
-
-1;
