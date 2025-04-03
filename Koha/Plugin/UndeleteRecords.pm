@@ -34,13 +34,13 @@ use Koha::Biblios;
 use Koha::Biblio;
 
 
-our $VERSION = 0.8;
+our $VERSION = 0.9;
 our $metadata = {
 	name            => 'UndeleteRecords',
 	author          => 'David Bourgault, Olivier Vézina, William Lavoie',
 	description     => 'Undelete records',
 	date_authored   => '2017-11-15',
-	date_updated    => '2025-03-17',
+	date_updated    => '2025-04-03',
 	minimum_version => '22.05',
 	maximum_version => undef,
 	version         => $VERSION,
@@ -117,8 +117,8 @@ sub calculate {
 
     if($Type eq "Records"){
         $all_deleted_sql = "SELECT deletedbiblio.biblionumber, COALESCE(deletedbiblio.author, biblio.author),
-        COALESCE(deletedbiblio.title,biblio.title),  COALESCE(deletedbiblioitems.isbn, deletedbiblioitems.isbn),
-        COALESCE(deletedbiblioitems.issn, deletedbiblioitems.issn), deletedbiblio.timestamp, deletedbiblio.datecreated
+        COALESCE(deletedbiblio.title,biblio.title),  deletedbiblioitems.isbn,
+        deletedbiblioitems.issn, deletedbiblio.timestamp, deletedbiblio.datecreated
         FROM deletedbiblio
         LEFT JOIN biblio ON deletedbiblio.biblionumber = biblio.biblionumber
         LEFT JOIN deletedbiblioitems ON deletedbiblio.biblionumber = deletedbiblioitems.biblionumber
@@ -126,8 +126,8 @@ sub calculate {
             AND deletedbiblio.timestamp <= IF('$ToDate' LIKE '' AND '$FromDate' NOT LIKE '', NOW(), DATE_ADD('$ToDate', INTERVAL 1 DAY));";
     }elsif($Type eq "Items"){
         $all_deleted_sql = "SELECT deleteditems.itemnumber, deleteditems.barcode, COALESCE(deletedbiblio.title,biblio.title),
-            COALESCE(deletedbiblio.author, biblio.author), COALESCE(deletedbiblioitems.isbn, deletedbiblioitems.isbn),
-            COALESCE(deletedbiblioitems.issn, deletedbiblioitems.issn), deleteditems.biblionumber, deleteditems.timestamp, IF(deleteditems.barcode
+            COALESCE(deletedbiblio.author, biblio.author), COALESCE(deletedbiblioitems.isbn, biblioitems.isbn),
+            COALESCE(deletedbiblioitems.issn, biblioitems.issn), deleteditems.biblionumber, deleteditems.timestamp, IF(deleteditems.barcode
             IN (
                 SELECT items.barcode
                 FROM items
