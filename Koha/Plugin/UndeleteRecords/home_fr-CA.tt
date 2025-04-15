@@ -45,7 +45,7 @@
 					</div>
 				</fieldset>
 				<fieldset>
-					<input id="submit" type="submit" value="Calculate" style="color: white; border: none; float: right; background-color: #59C134;" class="input" disabled/>
+					<input id="submit" type="submit" value="Exécuter" style="color: white; border: none; float: right; background-color: #59C134;" class="input" disabled/>
 				</fieldset>
 			</form>
 		</div>
@@ -113,8 +113,8 @@
 				</div>
                 <p id="barcodeMessage"; style="color: red"></p>
 
-				<button type="submit" class="approve" name="confirm" value="confirm" accesskey="y" style="background: #59C134; color: white; border: none;">Confirm</button>
-				<button type="submit" class="deny" name="confirm" value="cancel" accesskey="n" style="background: #028CB5; color: white; border: none;">Cancel</button>
+				<button type="submit" class="approve" name="confirm" value="confirm" accesskey="y" style="background: #59C134; color: white; border: none;">Confirmer</button>
+				<button type="submit" class="deny" name="confirm" value="cancel" accesskey="n" style="background: #028CB5; color: white; border: none;">Annuler</button>
 			</form>
 		</div>
 		[% END %]
