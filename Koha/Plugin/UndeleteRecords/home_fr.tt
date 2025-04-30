@@ -88,8 +88,8 @@
 							<tbody>
 								<tr>
 									[% IF type == "Items"%]
-										<td style="text-align: center"><input name='selected_itemnumbers[]' id="chk[% counter %]" type="checkbox" value="[% all_itemnumbers.$counter %]">[% all_itemnumbers.$counter %]</td>
-										<td style="text-align: center">[% all_barcodes.$counter %] <font color="red"> [% all_issimilarbarcode.$counter %]</font></td>
+										<td style="text-align: center;"><div style="display: flex; align-items: center"><input name='selected_itemnumbers[]' id="chk[% counter %]" type="checkbox" value="[% all_itemnumbers.$counter %]">[% all_itemnumbers.$counter %]</div></td>
+										<td style="text-align: center;">[% all_barcodes.$counter %] <font color="red"> [% all_issimilarbarcode.$counter %]</font></td>
 										<td style="text-align: center;"><div style="width: 10rem;">[% all_titles.$counter %]</div></td>
 										<td style="text-align: center;"><div style="min-width: fit-content;">[% all_authors.$counter %]</div></td>
 										<td style="text-align: center">[% all_isbn.$counter %]</td>
@@ -97,7 +97,7 @@
 										<td style="text-align: center">[% all_biblionumbers.$counter %]</td>
 										<td style="text-align: center">[% all_timestamps.$counter %]</td>
 									[% ELSE %]
-										<td style="text-align: center"><input name='selected_itemnumbers[]' id="chk[% counter %]" type="checkbox" value="[% all_biblionumbers.$counter %]">[% all_biblionumbers.$counter %]</td>
+										<td style="text-align: center"> style="display: flex; align-items: center"><input name='selected_itemnumbers[]' id="chk[% counter %]" type="checkbox" value="[% all_biblionumbers.$counter %]">[% all_biblionumbers.$counter %]</div></td>
 										<td style="text-align: center"> [% all_titles.$counter %]</td>
 										<td style="text-align: center">[% all_authors.$counter %]</td>
 										<td style="text-align: center">[% all_isbn.$counter %]</td>
@@ -159,7 +159,7 @@
     function countSimilarBarcodes() {
         sameBarcodes = '[% all_issimilarbarcode.join("") %]';
         if (sameBarcodes.length > 0) {
-            document.getElementById('barcodeMessage').innerHTML = "* These barcodes already exist. If these items are restored, the barcodes will be changed to <i>OriginalBarcode</i>_1.";
+            document.getElementById('barcodeMessage').innerHTML = "* Ces code-barres existent déjà. Si ces exemplaires sont restaurés, les code-barres seront changés par <i>OriginalBarcode</i>_1.";
         }
     }
 

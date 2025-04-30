@@ -88,8 +88,8 @@
 							<tbody>
 								<tr>
 									[% IF type == "Items"%]
-										<td style="text-align: center"><input name='selected_itemnumbers[]' id="chk[% counter %]" type="checkbox" value="[% all_itemnumbers.$counter %]">[% all_itemnumbers.$counter %]</td>
-										<td style="text-align: center">[% all_barcodes.$counter %] <font color="red"> [% all_issimilarbarcode.$counter %]</font></td>
+										<td style="text-align: center;"><div style="display: flex; align-items: center"><input name='selected_itemnumbers[]' id="chk[% counter %]" type="checkbox" value="[% all_itemnumbers.$counter %]">[% all_itemnumbers.$counter %]</div></td>
+										<td style="text-align: center;">[% all_barcodes.$counter %] <font color="red"> [% all_issimilarbarcode.$counter %]</font></td>
 										<td style="text-align: center;"><div style="width: 10rem;">[% all_titles.$counter %]</div></td>
 										<td style="text-align: center;"><div style="min-width: fit-content;">[% all_authors.$counter %]</div></td>
 										<td style="text-align: center">[% all_isbn.$counter %]</td>
@@ -97,7 +97,7 @@
 										<td style="text-align: center">[% all_biblionumbers.$counter %]</td>
 										<td style="text-align: center">[% all_timestamps.$counter %]</td>
 									[% ELSE %]
-										<td style="text-align: center"><input name='selected_itemnumbers[]' id="chk[% counter %]" type="checkbox" value="[% all_biblionumbers.$counter %]">[% all_biblionumbers.$counter %]</td>
+										<td style="text-align: center"> style="display: flex; align-items: center"><input name='selected_itemnumbers[]' id="chk[% counter %]" type="checkbox" value="[% all_biblionumbers.$counter %]">[% all_biblionumbers.$counter %]</div></td>
 										<td style="text-align: center"> [% all_titles.$counter %]</td>
 										<td style="text-align: center">[% all_authors.$counter %]</td>
 										<td style="text-align: center">[% all_isbn.$counter %]</td>
