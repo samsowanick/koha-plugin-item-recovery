@@ -20,6 +20,7 @@
 		<div id="form" align='left' style='width:100%; display: flex; justify-content: center; flex-grow: 1; align-items: center;'>
 			<form method='post' style="background: white;">
 				<!-- Necessary for the plugin to run, do not remove  -->
+				[% INCLUDE 'csrf-token.inc' %]
 				<input type='hidden' name='class' value='[% CLASS %]'/>
 				<input type='hidden' name='method' value='[% METHOD %]'/>
 				<input type='hidden' name='action' value='calculate'/>
@@ -52,6 +53,7 @@
 		[% IF ( all_titles ) %]
 		<div id="needsconfirmation" class="dialog alert pb-2" style="flex-grow: 1; background: #ECECEC; margin-right: 2em; margin-left: 2em; overflow: auto; min-width: fit-content;">
 			<form method="post">
+				[% INCLUDE 'csrf-token.inc' %]
 				<input type='hidden' name='class' value='[% CLASS %]'/>
 				<input type='hidden' name='method' value='[% METHOD %]'/>
 				<input type='hidden' name='action' value='merge'/>
