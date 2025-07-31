@@ -29,14 +29,16 @@
 					<input autocomplete="off" id="target" name="target" class="card-input ui-autocomplete-input" type="hidden" />
 					<div>
 						<p style="font-weight: bolder; ">Please choose which type to restore: </p>
-						<p style="max-width: fit-content; margin-right: auto; margin-left:auto;">(Only one at the time get be picked) </p>
+						<p style="max-width: fit-content; margin-right: auto; margin-left:auto;">(Choose one at a time) </p>
 						<div style="display: flex; gap: 1em;">
 							<div style="max-width: fit-content; margin-right: auto; margin-left:auto;">
-								Records: <input type="checkbox" name="RecordsType" onclick="uncheck1()" id="chkRecordsType" value="Records"/>
-							</div>
+                                <label for="records">Records:</label>
+                                <input id="records" type="radio" name="records_or_items" value="Records" onclick="selectType()"/>
+                            </div>
 							<div style="max-width: fit-content; margin-right: auto; margin-left:auto;">
-								Items:   <input type="checkbox" name="ItemsType" onclick="uncheck2()" id="chkItemsType"  value="Items" />
-							</div>
+                                <label for="items">Items:</label>
+                                <input id="items" type="radio" name="records_or_items" value="Items" onclick="selectType()"/>
+                            </div>
 						</div>
 					</div>
 					<div style="display: flex; flex-direction: column; gap: 1em;">
@@ -138,14 +140,7 @@
 <!-- Footer-->
 <script>
 
-	function uncheck1(){
-		document.getElementById("chkRecordsType").checked = true;
-        document.getElementById("chkItemsType").checked = false;
-		document.getElementById("submit").disabled = false;
-	}
-	function uncheck2(){
-		document.getElementById("chkRecordsType").checked = false;
-        document.getElementById("chkItemsType").checked = true;
+	function selectType(){
 		document.getElementById("submit").disabled = false;
 	}
 
