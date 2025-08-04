@@ -34,10 +34,10 @@ use Koha::Biblios;
 use Koha::Biblio;
 
 
-our $VERSION = 0.9;
+our $VERSION = 1.0;
 our $metadata = {
 	name            => 'UndeleteRecords',
-	author          => 'David Bourgault, Olivier Vézina, William Lavoie',
+	author          => 'David Bourgault, Olivier Vézina, William Lavoie, Hammat Wele',
 	description     => 'Undelete records',
 	date_authored   => '2017-11-15',
 	date_updated    => '2025-04-03',
@@ -60,20 +60,25 @@ sub tool {
 	my $cgi = $self->{cgi};
 
 	if ( $cgi->param('action') eq 'calculate') {
+        my $target           = $cgi->param('target');
+        my $records_or_items = $cgi->param('records_or_items');
+        my $FromDate         = $cgi->param('FromDate');
+        my $ToDate           = $cgi->param('ToDate');
 		$self->calculate(
-			$cgi->param('target'),
-            $cgi->param('RecordsType'),
-            $cgi->param('ItemsType'),
-            $cgi->param('FromDate'),
-            $cgi->param('ToDate'),
-            $cgi->param('test[]')
+            $target,
+            $records_or_items,
+            $FromDate,
+            $ToDate
         );
 	}
 	elsif ( $cgi->param('action') eq 'merge' and $cgi->param('confirm') eq 'confirm' ) {
+        my $target               = $cgi->param('target');
+        my $Type                 = $cgi->param('Type');
+        my $selected_itemnumbers = $cgi->param('selected_itemnumbers[]');
 		$self->fusion(
-			$cgi->param('target'),
-            $cgi->param('Type'),
-            $cgi->param('selected_itemnumbers[]'),
+            $target,
+            $Type,
+            $selected_itemnumbers,
 		);
 	}
 	else {
