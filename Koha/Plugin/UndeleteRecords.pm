@@ -34,7 +34,7 @@ use Koha::Biblios;
 use Koha::Biblio;
 
 
-our $VERSION = 1.0;
+our $VERSION = 1.1;
 our $metadata = {
 	name            => 'UndeleteRecords',
 	author          => 'David Bourgault, Olivier Vézina, William Lavoie, Hammat Wele',
