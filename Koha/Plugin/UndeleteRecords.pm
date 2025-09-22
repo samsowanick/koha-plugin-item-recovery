@@ -37,10 +37,10 @@ use Koha::Biblio;
 our $VERSION = 1.1;
 our $metadata = {
 	name            => 'UndeleteRecords',
-	author          => 'David Bourgault, Olivier Vézina, William Lavoie, Hammat Wele',
+	author          => 'David Bourgault, Olivier Vézina, William Lavoie, Hammat Wele, Noah Tremblay',
 	description     => 'Undelete records',
 	date_authored   => '2017-11-15',
-	date_updated    => '2025-04-03',
+	date_updated    => '2025-09-15',
 	minimum_version => '22.05',
 	maximum_version => undef,
 	version         => $VERSION,
@@ -422,22 +422,25 @@ sub fusion {
     my $search_engine = C4::Context->preference("SearchEngine");
 
     # Retrieve all biblionumbers
-    my @biblio_ids = Koha::Biblios->search()->get_column('biblionumber');
+    my @biblio_ids = @selected_biblionumbers;
 
     # Fetch all records by looping through the biblionumbers
     my @records;
-    foreach (@biblio_ids) {
-        my $biblio = Koha::Biblios->find($_);
-        if ($biblio) {
-            my $marc_record = $biblio->record();
-            if ($marc_record) {
-                push @records, $marc_record;
-            } else {
-                warn "Failed to retrieve MARC record for biblionumber $_";
-            }
-        } else {
-            warn "Failed to retrieve biblio record for biblionumber $_";
+    foreach my $biblionumber (@biblio_ids) {
+        my $biblio = Koha::Biblios->find($biblionumber);
+        unless ($biblio) {
+            warn "Skip undeleted biblionumber $biblionumber: no biblio found";
+            next;
         }
+
+        my $marc_record;
+        eval { $marc_record = $biblio->record(); };
+        if ($@ or !$marc_record) {
+            warn "Skip undeleted biblionumber $biblionumber: no valid MARC metadata";
+            next;
+        }
+
+        push @records, $marc_record;
     }
 
     if ($search_engine eq 'Zebra') {
