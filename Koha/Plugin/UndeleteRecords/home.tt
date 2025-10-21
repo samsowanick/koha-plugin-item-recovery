@@ -1,232 +1,390 @@
 [% INCLUDE 'doc-head-open.inc' %]
+
 <!-- Head-->
-<title>Koha:UndeleteRecords Plugin</title>
+
+<title>Koha: Item Recovery Plugin</title>
+
 [% INCLUDE 'doc-head-close.inc' %]
+
 [% INCLUDE 'calendar.inc' %]
+
 <!-- Body-->
+
 [% INCLUDE 'header.inc' %]
+
 [% INCLUDE 'cat-search.inc' %]
 
-<div id='breadcrumbs'><a href='/cgi-bin/koha/mainpage.pl'>Home</a> &rsaquo; <a href='/cgi-bin/koha/plugins/plugins-home.pl'>Plugins</a> &rsaquo; UndeleteRecords</div>
-<div id='doc3' style="height: 90%; display: flex;" class="mainDiv" >
-	<div style="flex-grow: 1; display: grid; justify-content: center; align-items: center; margin-right: 2em; margin-left: 2em;" >
-		<div id="inlibro-header" style="font-size: 14px; color: #696969; width: 75% ">
-			<p style="text-align: left;">This plugin was created by</p>
-			<img width='450px' src='[% PLUGIN_PATH %]/images/inLibro_en.svg'/>
-			<p style="text-align: right;">Visit our <a href="https://inlibro.com/en/">website</a> pour d'autres extensions Koha</p>
-		</div>
-	</div>
-	<div id='content' style='flex-grow: 1; background: white; display: flex; flex-direction: column; align-items: center; min-width: fit-content; padding-left: 1em; padding-right: 1em; overflow: auto' class="marginBottom">
-		<div id="form" align='left' style='width:100%; display: flex; justify-content: center; flex-grow: 1; align-items: center;'>
-			<form method='post' style="background: white;">
-				<!-- Necessary for the plugin to run, do not remove  -->
-				[% INCLUDE 'csrf-token.inc' %]
-				<input type='hidden' name='class' value='[% CLASS %]'/>
-				<input type='hidden' name='method' value='[% METHOD %]'/>
-				<input type='hidden' name='action' value='calculate'/>
-				<!-- end of plugin necessary inputs  -->
-				<fieldset style="display: inline-grid; gap: 2em; justify-items: center;">
-					<input autocomplete="off" id="target" name="target" class="card-input ui-autocomplete-input" type="hidden" />
-					<div>
-						<p style="font-weight: bolder; ">Please choose which type to restore: </p>
-						<p style="max-width: fit-content; margin-right: auto; margin-left:auto;">(Choose one at a time) </p>
-						<div style="display: flex; gap: 1em;">
-							<div style="max-width: fit-content; margin-right: auto; margin-left:auto;">
-                                <label for="records">Records:</label>
-                                <input id="records" type="radio" name="records_or_items" value="Records" onclick="selectType()"/>
-                            </div>
-							<div style="max-width: fit-content; margin-right: auto; margin-left:auto;">
-                                <label for="items">Items:</label>
-                                <input id="items" type="radio" name="records_or_items" value="Items" onclick="selectType()"/>
-                            </div>
-						</div>
-					</div>
-					<div style="display: flex; flex-direction: column; gap: 1em;">
-						<p style="font-weight: bolder; ">Records deleted between these dates:</p>
-						<input type="text" name="FromDate" id="FromDate" class="flatpickr card-input ui-autocomplete-input FromDate width" placeholder="From">
-						<input type="text" name="ToDate" id="ToDate" class="flatpickr card-input ui-autocomplete-input ToDate width" placeholder="To"/>
-					</div>
-				</fieldset>
-				<fieldset>
-					<input id="submit" type="submit" value="Calculate" style="color: white; border: none; float: right; background-color: #59C134;" class="input" disabled/>
-				</fieldset>
-			</form>
-		</div>
-		[% IF ( all_titles ) %]
-		<div id="needsconfirmation" class="dialog alert pb-2" style="flex-grow: 1; background: #ECECEC; margin-right: 2em; margin-left: 2em; overflow: auto; min-width: fit-content;">
-			<form method="post">
-				[% INCLUDE 'csrf-token.inc' %]
-				<input type='hidden' name='class' value='[% CLASS %]'/>
-				<input type='hidden' name='method' value='[% METHOD %]'/>
-				<input type='hidden' name='action' value='merge'/>
-				<input type='hidden' name='target' value='[% target %]'/>
-				<input type='hidden' name='sources' value='[% sources %]'/>
-				<p>To be undeleted:</p>
-				<div style="overflow:auto; max-height: 85%;" class="heightTable">
-					<table>
-						<thead>
-							<tr>
-								[% IF type == "Items" %]
-									<th style="text-align: center">Item Number</th>
-									<th style="text-align: center">Barcode</th>
-									<th style="text-align: center">Title</th>
-									<th style="text-align: center">Author</th>
-									<th style="text-align: center">ISBN</th>
-									<th style="text-align: center">ISSN</th>
-									<th style="text-align: center">Biblionumber</th>
-									<th style="text-align: center">Date and Time of Deletion</th>
-								[% ELSE %]
-									<th style="text-align: center">BiblioNumber</th>
-									<th style="text-align: center">Title</th>
-									<th style="text-align: center">Author</th>
-									<th style="text-align: center">ISBN</th>
-									<th style="text-align: center">ISSN</th>
-									<th style="text-align: center">Date and Time of Deletion</th>
-									<th style="text-align: center">Date of Creation</th>
-								[% END %]
-							</tr>
-						</thead>
-						[% counter = 0 %]
-						<input type="checkbox" checked value=[% type %] name="Type" id="chkType" style="display:none;"/>
-						[% WHILE counter < all_titles.size() %]
-							<tbody>
-								<tr>
-									[% IF type == "Items"%]
-										<td style="text-align: center;"><div style="display: flex; align-items: center"><input name='selected_itemnumbers[]' id="chk[% counter %]" type="checkbox" value="[% all_itemnumbers.$counter %]">[% all_itemnumbers.$counter %]</div></td>
-										<td style="text-align: center;">[% all_barcodes.$counter %] <font color="red"> [% all_issimilarbarcode.$counter %]</font></td>
-										<td style="text-align: center;"><div style="width: 10rem;">[% all_titles.$counter %]</div></td>
-										<td style="text-align: center;"><div style="min-width: fit-content;">[% all_authors.$counter %]</div></td>
-										<td style="text-align: center">[% all_isbn.$counter %]</td>
-										<td style="text-align: center">[% all_issn.$counter %]</td>
-										<td style="text-align: center">[% all_biblionumbers.$counter %]</td>
-										<td style="text-align: center">[% all_timestamps.$counter %]</td>
-									[% ELSE %]
-										<td style="text-align: center"><div style="display: flex; align-items: center"><input name='selected_itemnumbers[]' id="chk[% counter %]" type="checkbox" value="[% all_biblionumbers.$counter %]">[% all_biblionumbers.$counter %]</div></td>
-										<td style="text-align: center"> [% all_titles.$counter %]</td>
-										<td style="text-align: center">[% all_authors.$counter %]</td>
-										<td style="text-align: center">[% all_isbn.$counter %]</td>
-										<td style="text-align: center">[% all_issn.$counter %]</td>
-										<td style="text-align: center">[% all_timestamps.$counter %]</td>
-										<td style="text-align: center">[% all_creationTime.$counter %]</td>
-									[% END %]
-								</tr>
-							</tbody>
-							[% counter = counter + 1 %]
-						[% END %]
-					</table>
-				</div>
-                <p id="barcodeMessage"; style="color: red"></p>
 
-				<button type="submit" class="approve" name="confirm" value="confirm" accesskey="y" style="background: #59C134; color: white; border: none;">Confirm</button>
-				<button type="submit" class="deny" name="confirm" value="cancel" accesskey="n" style="background: #028CB5; color: white; border: none;">Cancel</button>
-			</form>
-		</div>
-		[% END %]
-		[% IF selected_biblionumbers %]
-			<div id="undeleted" class="dialog alert" style="background: #ECECEC;">
-			[% counter = 0 %]
-			[% WHILE counter < selected_biblionumbers.size() %]
-				[% IF  selected_count.$counter > 1 %]
-					<p>[% selected_count.$counter %] items undeleted for the record <a href="../catalogue/detail.pl?biblionumber=[% selected_biblionumbers.$counter %]" target="_blank">[% selected_biblionumbers.$counter %].</a></p>
-				[% ELSE %]
-					<p>[% selected_count.$counter %] item undeleted for the record <a href="../catalogue/detail.pl?biblionumber=[% selected_biblionumbers.$counter %]" target="_blank">[% selected_biblionumbers.$counter %].</a></p>
-				[% END %]
-				[% counter = counter + 1 %]
-			[% END %]
-			</div>
-		[% END %]
-	</div>
+
+<div id='breadcrumbs'><a href='/cgi-bin/koha/mainpage.pl'>Home</a> &rsaquo; <a href='/cgi-bin/koha/plugins/plugins-home.pl'>Plugins</a> &rsaquo; Item Recovery</div>
+
+<div id='doc3' style="height: 90%; display: flex;" class="mainDiv" >
+
+<div style="flex-grow: 1; display: grid; justify-content: center; align-items: center; margin-right: 2em; margin-left: 2em;" >
+
+<div id="cbcpl-header" style="font-size: 14px; color: #696969; width: 100%; text-align: center;">
+
+<img width='450px' src='https://private-user-images.githubusercontent.com/146876968/503749419-868c0bc2-0f33-49b9-a1f3-6e76abd5e985.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NjEwNjI0MjUsIm5iZiI6MTc2MTA2MjEyNSwicGF0aCI6Ii8xNDY4NzY5NjgvNTAzNzQ5NDE5LTg2OGMwYmMyLTBmMzMtNDliOS1hMWYzLTZlNzZhYmQ1ZTk4NS5wbmc_WC1BbXotQWxnb3JpdGhtPUFXUzQtSE1BQy1TSEEyNTYmWC1BbXotQ3JlZGVudGlhbD1BS0lBVkNPRFlMU0E1M1BRSzRaQSUyRjIwMjUxMDIxJTJGdXMtZWFzdC0xJTJGczMlMkZhd3M0X3JlcXVlc3QmWC1BbXotRGF0ZT0yMDI1MTAyMVQxNTU1MjVaJlgtQW16LUV4cGlyZXM9MzAwJlgtQW16LVNpZ25hdHVyZT1iZTA5YjE0MzJkOTcwNzg0NDc3Y2Y4ZTI3Zjc3YmRjZmNiZDYzYTA5YmVjYmNlZjY1MDc2NDZhNTY2NDczZjAwJlgtQW16LVNpZ25lZEhlYWRlcnM9aG9zdCJ9.alpkmvVCk3MTIKA_NLUv_DGoZVlmarSBSUCehUEpAac' alt="Fast Add Logo"/>
+
 </div>
+
+</div>
+
+<div id='content' style='flex-grow: 1; background: white; display: flex; flex-direction: column; align-items: center; min-width: fit-content; padding-left: 1em; padding-right: 1em; overflow: auto' class="marginBottom">
+
+<div id="form" align='left' style='width:100%; display: flex; justify-content: center; flex-grow: 1; align-items: center;'>
+
+<form method='post' style="background: white;">
+
+<!-- Necessary for the plugin to run, do not remove -->
+
+[% INCLUDE 'csrf-token.inc' %]
+
+<input type='hidden' name='class' value='[% CLASS %]'/>
+
+<input type='hidden' name='method' value='[% METHOD %]'/>
+
+<input type='hidden' name='action' value='calculate'/>
+
+<!-- end of plugin necessary inputs -->
+
+<fieldset style="display: inline-grid; gap: 1em; justify-items: center; width: 300px;">
+
+                    <legend style="font-weight: bolder; font-size: 1.2em; text-align: center; margin-bottom: 1em;">Enter Barcodes to Recover</legend>
+
+<input autocomplete="off" id="target" name="target" class="card-input ui-autocomplete-input" type="hidden" />
+
+<div style="display: flex; flex-direction: column; gap: 1em; width: 100%;">
+
+<label for="BarcodeList" class="sr-only">Barcode List</label>
+
+<textarea name="BarcodeList" id="BarcodeList" class="BarcodeList" placeholder="Enter one barcode per line" rows="10" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;"></textarea>
+
+</div>
+
+</fieldset>
+
+<fieldset style="border: none; margin-top: 1em;">
+
+<input id="submit" type="submit" value="Calculate" style="color: white; border: none; float: right; background-color: #59C134; padding: 10px 20px; border-radius: 5px; cursor: pointer;" class="input"/>
+
+</fieldset>
+
+</form>
+
+</div>
+
+[% IF ( error_message ) %]
+
+Error: [% error_message %]
+
+[% END %] [% IF ( success_message ) %]
+
+Success: [% success_message %]
+
+[% END %]
+
+[% IF ( all_titles ) %]
+
+<div id="needsconfirmation" class="dialog alert pb-2" style="flex-grow: 1; background: #ECECEC; margin-right: 2em; margin-left: 2em;
+overflow: auto; min-width: fit-content;">
+
+<form method="post">
+
+[% INCLUDE 'csrf-token.inc' %]
+
+<input type='hidden' name='class' value='[% CLASS %]'/>
+
+<input type='hidden' name='method' value='[% METHOD %]'/>
+
+<input type='hidden' name='action' value='merge'/>
+
+
+
+<input type='hidden' name='BarcodeList' value='[% BarcodeList %]'/>
+
+<input type='hidden' name='target' value='[% target %]'/>
+
+<input type='hidden' name='sources' value='[% sources %]'/>
+
+<p>To be undeleted:</p>
+
+<div style="overflow:auto; max-height: 85%;" class="heightTable">
+
+<table>
+
+<thead>
+
+<tr>
+
+<th style="text-align: center">Item Number</th>
+
+<th style="text-align: center">Barcode</th>
+
+<th style="text-align: center">Title</th>
+
+<th style="text-align: center">Author</th>
+
+<th style="text-align: center">ISBN</th>
+
+<th style="text-align: center">ISSN</th>
+
+<th style="text-align: center">Biblionumber</th>
+
+<th style="text-align: center">Date and Time of Deletion</th>
+
+</tr>
+
+</thead>
+
+[% counter = 0 %]
+
+[% WHILE counter < all_titles.size() %]
+
+<tbody>
+
+<tr>
+
+<td style="text-align: center;"><div style="display: flex; align-items: center"><input name='selected_itemnumbers[]' id="chk[% counter %]" type="checkbox" value="[% all_itemnumbers.$counter %]">[% all_itemnumbers.$counter %]</div></td>
+
+<td style="text-align: center;">[% all_barcodes.$counter %] <font color="red"> [% all_issimilarbarcode.$counter %]</font></td>
+
+<td style="text-align: center;"><div style="width: 10rem;">[% all_titles.$counter %]</div></td>
+
+<td style="text-align: center;"><div style="min-width: fit-content;">[% all_authors.$counter %]</div></td>
+
+<td style="text-align: center">[% all_isbn.$counter %]</td>
+
+<td style="text-align: center">[% all_issn.$counter %]</td>
+
+<td style="text-align: center">[% all_biblionumbers.$counter %]</td>
+
+<td style="text-align: center">[% all_timestamps.$counter %]</td>
+
+</tr>
+
+</tbody>
+
+[% counter = counter + 1 %]
+
+[% END %]
+
+</table>
+
+</div>
+
+                <p id="barcodeMessage" style="color: red"></p>
+
+
+
+<button type="submit" class="approve" name="confirm" value="confirm" accesskey="y" style="background: #59C134; color: white; border: none;">Confirm</button>
+
+<button type="submit" class="deny" name="confirm" value="cancel" accesskey="n" style="background: #028CB5; color: white; border: none;">Cancel</button>
+
+</form>
+
+</div>
+
+[% END %]
+
+[% IF selected_biblionumbers.size %]
+
+<div id="undeleted" class="dialog alert" style="background: #ECECEC;">
+
+[% counter = 0 %]
+
+[% WHILE counter < selected_biblionumbers.size() %]
+
+[% IF  selected_count.$counter > 1 %]
+
+<p>[% selected_count.$counter %] items undeleted for the record <a href="../catalogue/detail.pl?biblionumber=[% selected_biblionumbers.$counter %]" target="_blank">[% selected_biblionumbers.$counter %].</a></p>
+
+[% ELSE %]
+
+<p>[% selected_count.$counter %] item undeleted for the record <a href="../catalogue/detail.pl?biblionumber=[% selected_biblionumbers.$counter %]" target="_blank">[% selected_biblionumbers.$counter %].</a></p>
+
+[% END %]
+
+[% counter = counter + 1 %]
+
+[% END %]
+
+</div>
+
+[% END %]
+
+</div>
+
+</div>
+
 <!-- Footer-->
+
 <script>
 
-	function selectType(){
-		document.getElementById("submit").disabled = false;
-	}
-
-	function checkValueByClass(){
-        var FromDate = $( ".FromDate" ).val();
-        if(FromDate ==''){
-			$( ".ToDate" ).prop( "disabled", true );
-         } else{
-			$( ".ToDate" ).prop( "disabled", false );
-         }
-    }
-
     function countSimilarBarcodes() {
-        sameBarcodes = '[% all_issimilarbarcode.join("") %]';
+
+        var sameBarcodes = '[% all_issimilarbarcode.join("") %]';
+
         if (sameBarcodes.length > 0) {
-            document.getElementById('barcodeMessage').innerHTML = "* These barcodes already exist. If these items are restored, the barcodes will be changed to <i>OriginalBarcode</i>_1.";
+
+            document.getElementById('barcodeMessage').innerHTML = "* These barcodes already exist. If these items are restored, the barcodes will be changed to <i>OriginalBarcode</i>_rec.";
+
         }
+
     }
 
-	checkValueByClass();
+
+
+    // Run on page load
+
     countSimilarBarcodes();
 
-	$('.FromDate').change(function () {
-		checkValueByClass();
-	});
 
-	var src_count = 0;
-	function add_source_field() {
-		var s = $("div#source-0").clone(true);
-		s.attr("id", "source-" + (++src_count));
-		$("fieldset#source-select").append(s);
-		$("fieldset#source-select #source-" + src_count + " #source-input-0").attr("name", "source-" + src_count);
-		$("fieldset#source-select #source-" + src_count + " #source-input-0").removeAttr("disabled");
-		$("fieldset#source-select #source-" + src_count + " #source-input-0").attr("id", "source-input-" + src_count);
-		$("fieldset#source-select #source-count").attr("value", src_count);
-		add_autocomplete($("fieldset#source-select #source-" + src_count + " #source-input-" + src_count));
-	}
-	function del_source_field(caller) { $(caller).parent().remove(); }
-	$(function() {
-		add_source_field();
-	});
+
+var src_count = 0;
+
+function add_source_field() {
+
+var s = $("div#source-0").clone(true);
+
+s.attr("id", "source-" + (++src_count));
+
+$("fieldset#source-select").append(s);
+
+$("fieldset#source-select #source-" + src_count + " #source-input-0").attr("name", "source-" + src_count);
+
+$("fieldset#source-select #source-" + src_count + " #source-input-0").removeAttr("disabled");
+
+$("fieldset#source-select #source-" + src_count + " #source-input-0").attr("id", "source-input-" + src_count);
+
+$("fieldset#source-select #source-count").attr("value", src_count);
+
+add_autocomplete($("fieldset#source-select #source-" + src_count + " #source-input-" + src_count));
+
+}
+
+function del_source_field(caller) { $(caller).parent().remove(); }
+
+$(function() {
+
+add_source_field();
+
+});
+
 </script>
+
 <style>
+
     .mainDiv {
-		flex-direction: column;
-		background: white;
-	}
 
-	.pb-2{padding-bottom: 2em;}
+flex-direction: column;
 
+background: white;
 
-	@media (min-width: 1200px){
-		.pb-2{padding-bottom: 0em;}
-
-		.mainDiv{
-			flex-direction: row;
-			background: #ECECEC;
-			margin-right: auto;
-			margin-left: auto;
-			max-width: fit-content;
-		}
+}
 
 
-	}
 
-	.input[disabled] {
-        background-color: grey !important;
-        cursor: not-allowed !important;
+.pb-2{padding-bottom: 2em;}
+
+
+
+    .sr-only {
+
+        position: absolute;
+
+        width: 1px;
+
+        height: 1px;
+
+        padding: 0;
+
+        margin: -1px;
+
+        overflow: hidden;
+
+        clip: rect(0,0,0,0);
+
+        border: 0;
+
     }
 
-	.input[disabled]:hover {
-		background: grey !important;
-	}
 
-	html {height: 100%;}
-	body {height: 100%;}
-	#source-0 { display: none; }
-	.source-row { padding-bottom: 4px; }
-	.width {width: 100%;}
-	#add-source-btn { display: none; }
-	#add-source-btn, #del-source-btn { font-family: mono; }
-	#source-select div:nth-of-type(2) a#del-source-btn { display: none; }
-	#source-select div:last-of-type   a#add-source-btn { display: inline-block; }
-	li { display: block; }
-	div.dialog { width: initial; }
+
+
+
+@media (min-width: 1200px){
+
+.pb-2{padding-bottom: 0em;}
+
+
+
+.mainDiv{
+
+flex-direction: row;
+
+background: #ECECEC;
+
+margin-right: auto;
+
+margin-left: auto;
+
+max-width: fit-content;
+
+}
+
+
+
+
+
+}
+
+
+
+.input[disabled] {
+
+        background-color: grey !important;
+
+        cursor: not-allowed !important;
+
+    }
+
+
+
+.input[disabled]:hover {
+
+background: grey !important;
+
+}
+
+
+
+html {height: 100%;}
+
+body {height: 100%;}
+
+#source-0 { display: none; }
+
+.source-row { padding-bottom: 4px; }
+
+.width {width: 100%;}
+
+#add-source-btn { display: none; }
+
+#add-source-btn, #del-source-btn { font-family: mono; }
+
+#source-select div:nth-of-type(2) a#del-source-btn { display: none; }
+
+#source-select div:last-of-type    a#add-source-btn { display: inline-block; }
+
+li { display: block; }
+
+div.dialog { width: initial; }
+
+
+
 
 
 </style>
+
 [% INCLUDE 'intranet-bottom.inc' %]
