@@ -37,7 +37,7 @@ use Koha::Biblio;
 use Try::Tiny;
 
 
-our $VERSION = '1.2';
+our $VERSION = '1.3';
 our $metadata = {
     name            => 'Item Recovery',
     author          => 'Samuel Sowanick',
@@ -294,37 +294,48 @@ sub fusion {
 	$dbh->begin_work;
     try {
         
-        try {
-            $dbh->do("
-                INSERT IGNORE INTO biblio (biblionumber,frameworkcode,author,title,medium,subtitle,part_number,part_name,unititle,notes,serial,seriestitle,copyrightdate,timestamp,datecreated,abstract)
-                SELECT biblionumber,frameworkcode,author,title,medium,subtitle,part_number,part_name,unititle,notes,serial,seriestitle,copyrightdate,timestamp,datecreated,abstract FROM deletedbiblio db
-                WHERE db.biblionumber IN ($bib_placeholders)
-            ", undef, @selected_biblionumbers);
-        } catch {
-            die "BIBLIO INSERT FAILED: $_";
-        };
+        # Restore biblio records
+try {
+    my $rows = $dbh->do("
+        INSERT IGNORE INTO biblio (biblionumber,frameworkcode,author,title,medium,subtitle,part_number,part_name,unititle,notes,serial,seriestitle,copyrightdate,timestamp,datecreated,abstract)
+        SELECT biblionumber,COALESCE(frameworkcode,''),author,title,medium,subtitle,part_number,part_name,unititle,notes,serial,seriestitle,copyrightdate,timestamp,datecreated,abstract 
+        FROM deletedbiblio db
+        WHERE db.biblionumber IN ($bib_placeholders)
+    ", undef, @selected_biblionumbers);
+    warn "BIBLIO: Attempted to insert " . scalar(@selected_biblionumbers) . " records, actually inserted: " . ($rows || 0);
+} catch {
+    die "BIBLIO INSERT FAILED: $_";
+};
 
-        # Restore biblioitems records
-        try {
-            $dbh->do("
-                INSERT IGNORE INTO biblioitems (biblioitemnumber,biblionumber,volume,number,itemtype,isbn,issn,ean,publicationyear,publishercode,volumedate,volumedesc,collectiontitle,collectionissn,collectionvolume,editionstatement,editionresponsibility,timestamp,illus,pages,notes,size,place,lccn,url,cn_source,cn_class,cn_item,cn_suffix,cn_sort,agerestriction,totalissues)
-                SELECT biblioitemnumber,biblionumber,volume,number,itemtype,isbn,issn,ean,publicationyear,publishercode,volumedate,volumedesc,collectiontitle,collectionissn,collectionvolume,editionstatement,editionresponsibility,timestamp,illus,pages,notes,size,place,lccn,url,cn_source,cn_class,cn_item,cn_suffix,cn_sort,agerestriction,totalissues FROM deletedbiblioitems dbi
-                WHERE dbi.biblionumber IN ($bib_placeholders)
-            ", undef, @selected_biblionumbers);
-        } catch {
-            die "BIBLIOITEMS INSERT FAILED: $_";
-        };
+# Restore biblioitems records
+try {
+    my $rows = $dbh->do("
+        INSERT IGNORE INTO biblioitems (biblioitemnumber,biblionumber,volume,number,itemtype,isbn,issn,ean,publicationyear,publishercode,volumedate,volumedesc,collectiontitle,collectionissn,collectionvolume,editionstatement,editionresponsibility,timestamp,illus,pages,notes,size,place,lccn,url,cn_source,cn_class,cn_item,cn_suffix,cn_sort,agerestriction,totalissues)
+        SELECT biblioitemnumber,biblionumber,volume,number,itemtype,isbn,issn,ean,publicationyear,publishercode,volumedate,volumedesc,collectiontitle,collectionissn,collectionvolume,editionstatement,editionresponsibility,timestamp,illus,pages,notes,size,place,lccn,url,cn_source,cn_class,cn_item,cn_suffix,cn_sort,agerestriction,totalissues 
+        FROM deletedbiblioitems dbi
+        WHERE dbi.biblionumber IN ($bib_placeholders)
+    ", undef, @selected_biblionumbers);
+    warn "BIBLIOITEMS: Attempted to insert " . scalar(@selected_biblionumbers) . " records, actually inserted: " . ($rows || 0);
+} catch {
+    die "BIBLIOITEMS INSERT FAILED: $_";
+};
 
-        # Restore metadata records 
-        try {
-            $dbh->do("
-                INSERT IGNORE INTO biblio_metadata (id, biblionumber, format, `schema`, metadata, timestamp)
-                SELECT id, biblionumber, format, `schema`, metadata, timestamp FROM deletedbiblio_metadata dbm
-                WHERE dbm.biblionumber IN ($bib_placeholders)
-            ", undef, @selected_biblionumbers);
-        } catch {
-            die "BIBLIO_METADATA INSERT FAILED: $_";
-        };
+# Restore metadata records - DON'T restore the ID, let MySQL generate it
+try {
+    my $rows = $dbh->do("
+        INSERT INTO biblio_metadata (biblionumber, format, `schema`, metadata, timestamp)
+        SELECT biblionumber, format, `schema`, metadata, timestamp 
+        FROM deletedbiblio_metadata dbm
+        WHERE dbm.biblionumber IN ($bib_placeholders)
+        AND NOT EXISTS (
+            SELECT 1 FROM biblio_metadata bm 
+            WHERE bm.biblionumber = dbm.biblionumber
+        )
+    ", undef, @selected_biblionumbers);
+    warn "BIBLIO_METADATA: Attempted to insert " . scalar(@selected_biblionumbers) . " records, actually inserted: " . ($rows || 0);
+} catch {
+    die "BIBLIO_METADATA INSERT FAILED: $_";
+};
         
         # Check for and rename duplicate barcodes before restoring items
         try {
@@ -359,12 +370,44 @@ sub fusion {
             die "ITEMS INSERT FAILED: $_";
         };
 
-        # Clean up deleted tables
+		# Clean up deleted items FIRST
         try {
             $dbh->do("DELETE FROM deleteditems WHERE itemnumber IN ($item_placeholders)", undef, @selected_itemnumbers);
         } catch {
-            die "DELETE FAILED: $_";
+            die "DELETEDITEMS CLEANUP FAILED: $_";
         };
+
+        # Clean up deleted tables
+			try {
+		$dbh->do("
+			DELETE FROM deletedbiblio_metadata 
+			WHERE biblionumber IN ($bib_placeholders)
+			AND NOT EXISTS (
+				SELECT 1 FROM deleteditems di 
+				WHERE di.biblionumber = deletedbiblio_metadata.biblionumber
+			)
+		", undef, @selected_biblionumbers);
+    
+		$dbh->do("
+			DELETE FROM deletedbiblioitems 
+			WHERE biblionumber IN ($bib_placeholders)
+			AND NOT EXISTS (
+				SELECT 1 FROM deleteditems di 
+				WHERE di.biblionumber = deletedbiblioitems.biblionumber
+			)
+		", undef, @selected_biblionumbers);
+    
+		$dbh->do("
+			DELETE FROM deletedbiblio 
+			WHERE biblionumber IN ($bib_placeholders)
+			AND NOT EXISTS (
+				SELECT 1 FROM deleteditems di 
+				WHERE di.biblionumber = deletedbiblio.biblionumber
+			)
+		", undef, @selected_biblionumbers);
+		} catch {
+		    die "DELETED TABLES CLEANUP FAILED: $_";
+		};
         
         $dbh->commit; # Finalize changes if all queries succeeded
 
@@ -375,6 +418,17 @@ sub fusion {
             error_message => "A database error occurred during item recovery. No changes were made. Error: $_"
         );
     };
+
+	# After successful commit, before reindex
+	my $recovered_count = scalar(@selected_itemnumbers);
+	my $biblios_cleaned = $dbh->selectrow_array("
+		SELECT COUNT(*) FROM biblio 
+		WHERE biblionumber IN ($bib_placeholders)
+	", undef, @selected_biblionumbers);
+
+	$template->param(
+		success_message => "Successfully recovered $recovered_count item(s) across $biblios_cleaned bibliographic record(s)."
+	);
 
     # Re-index the affected records
     $self->reindex_biblios(\@selected_biblionumbers);
@@ -387,32 +441,93 @@ sub reindex_biblios {
     return unless @biblio_ids;
 
     my $search_engine = C4::Context->preference("SearchEngine");
+    
+    warn "Starting reindex of " . scalar(@biblio_ids) . " biblios with search engine: $search_engine";
 
-    my @records;
-    for my $biblionumber (@biblio_ids) {
-        my $biblio = Koha::Biblios->find($biblionumber);
-        next unless $biblio;
-        my $marc_record = eval { $biblio->record() };
-        if ($@ or !$marc_record) {
-            warn "Skip reindexing biblionumber $biblionumber: no valid MARC metadata";
-            next;
-        }
-        push @records, $marc_record;
+    if ($search_engine eq 'Elasticsearch') {
+        $self->reindex_elasticsearch(\@biblio_ids);
     }
-
-    return unless @records;
-
-    if ($search_engine eq 'Zebra') {
-        my $zebra_indexer = Koha::SearchEngine::Zebra::Indexer->new({ index => $Koha::SearchEngine::BIBLIOS_INDEX });
-        $zebra_indexer->index_records(\@biblio_ids, "update", "biblioserver", undef);
-    }
-    elsif ($search_engine eq 'Elasticsearch') {
-        my $elastic_indexer = Koha::SearchEngine::Elasticsearch::Indexer->new({ index => $Koha::SearchEngine::BIBLIOS_INDEX });
-        $elastic_indexer->update_index(\@biblio_ids, \@records);
+    elsif ($search_engine eq 'Zebra') {
+        $self->reindex_zebra(\@biblio_ids);
     }
     else {
         warn "Unknown search engine: $search_engine. Unable to reindex.";
     }
+}
+
+sub reindex_elasticsearch {
+    my ($self, $biblio_ids_ref) = @_;
+    my @biblio_ids = @$biblio_ids_ref;
+    
+    require Koha::SearchEngine::Elasticsearch::Indexer;
+    
+    my $indexer = Koha::SearchEngine::Elasticsearch::Indexer->new({ 
+        index => $Koha::SearchEngine::BIBLIOS_INDEX 
+    });
+    
+    my @records_to_index;
+    my @valid_biblio_ids;
+    
+    foreach my $biblionumber (@biblio_ids) {
+        my $biblio = Koha::Biblios->find($biblionumber);
+        unless ($biblio) {
+            warn "Could not find biblio $biblionumber for reindexing";
+            next;
+        }
+        
+        # Get the MARC record with embedded item data
+        my $marc_record = eval { $biblio->metadata->record };
+        unless ($marc_record) {
+            warn "Could not get MARC record for biblio $biblionumber: $@";
+            next;
+        }
+        
+        # Embed item data into the MARC record
+        my @items = $biblio->items->as_list;
+        foreach my $item (@items) {
+            try {
+                my $item_field = $item->as_marc_field;
+                $marc_record->append_fields($item_field) if $item_field;
+            } catch {
+                warn "Could not add item " . $item->itemnumber . " to MARC for biblio $biblionumber: $_";
+            };
+        }
+        
+        push @records_to_index, $marc_record;
+        push @valid_biblio_ids, $biblionumber;
+        
+        warn "Prepared biblio $biblionumber for Elasticsearch indexing with " . scalar(@items) . " items";
+    }
+    
+    if (@records_to_index) {
+        try {
+            $indexer->update_index(\@valid_biblio_ids, \@records_to_index);
+            warn "Successfully indexed " . scalar(@valid_biblio_ids) . " records in Elasticsearch";
+        } catch {
+            warn "Elasticsearch indexing failed: $_";
+        };
+    } else {
+        warn "No valid records to index in Elasticsearch";
+    }
+}
+
+sub reindex_zebra {
+    my ($self, $biblio_ids_ref) = @_;
+    my @biblio_ids = @$biblio_ids_ref;
+    
+    require C4::Biblio;
+    
+    foreach my $biblionumber (@biblio_ids) {
+        try {
+            # ModZebra automatically includes all item data
+            C4::Biblio::ModZebra($biblionumber, "specialUpdate", "biblioserver");
+            warn "Successfully queued biblio $biblionumber for Zebra reindexing";
+        } catch {
+            warn "Failed to reindex biblio $biblionumber in Zebra: $_";
+        };
+    }
+    
+    warn "Queued " . scalar(@biblio_ids) . " records for Zebra indexing";
 }
 
 
