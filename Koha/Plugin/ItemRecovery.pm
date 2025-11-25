@@ -296,45 +296,45 @@ sub fusion {
         
         # Restore biblio records
 try {
-    my $rows = $dbh->do("
-        INSERT IGNORE INTO biblio (biblionumber,frameworkcode,author,title,medium,subtitle,part_number,part_name,unititle,notes,serial,seriestitle,copyrightdate,timestamp,datecreated,abstract)
-        SELECT biblionumber,COALESCE(frameworkcode,''),author,title,medium,subtitle,part_number,part_name,unititle,notes,serial,seriestitle,copyrightdate,timestamp,datecreated,abstract 
-        FROM deletedbiblio db
-        WHERE db.biblionumber IN ($bib_placeholders)
-    ", undef, @selected_biblionumbers);
-    warn "BIBLIO: Attempted to insert " . scalar(@selected_biblionumbers) . " records, actually inserted: " . ($rows || 0);
+    my $rows = $dbh->do("
+        INSERT IGNORE INTO biblio (biblionumber,frameworkcode,author,title,medium,subtitle,part_number,part_name,unititle,notes,serial,seriestitle,copyrightdate,timestamp,datecreated,abstract)
+        SELECT biblionumber,COALESCE(frameworkcode,''),author,title,medium,subtitle,part_number,part_name,unititle,notes,serial,seriestitle,NULLIF(copyrightdate, '') AS copyrightdate,NULLIF(timestamp, '') AS timestamp,NULLIF(datecreated, '') AS datecreated,abstract 
+        FROM deletedbiblio db
+        WHERE db.biblionumber IN ($bib_placeholders)
+    ", undef, @selected_biblionumbers);
+    warn "BIBLIO: Attempted to insert " . scalar(@selected_biblionumbers) . " records, actually inserted: " . ($rows || 0);
 } catch {
-    die "BIBLIO INSERT FAILED: $_";
+    die "BIBLIO INSERT FAILED: $_";
 };
 
 # Restore biblioitems records
 try {
-    my $rows = $dbh->do("
-        INSERT IGNORE INTO biblioitems (biblioitemnumber,biblionumber,volume,number,itemtype,isbn,issn,ean,publicationyear,publishercode,volumedate,volumedesc,collectiontitle,collectionissn,collectionvolume,editionstatement,editionresponsibility,timestamp,illus,pages,notes,size,place,lccn,url,cn_source,cn_class,cn_item,cn_suffix,cn_sort,agerestriction,totalissues)
-        SELECT biblioitemnumber,biblionumber,volume,number,itemtype,isbn,issn,ean,publicationyear,publishercode,volumedate,volumedesc,collectiontitle,collectionissn,collectionvolume,editionstatement,editionresponsibility,timestamp,illus,pages,notes,size,place,lccn,url,cn_source,cn_class,cn_item,cn_suffix,cn_sort,agerestriction,totalissues 
-        FROM deletedbiblioitems dbi
-        WHERE dbi.biblionumber IN ($bib_placeholders)
-    ", undef, @selected_biblionumbers);
-    warn "BIBLIOITEMS: Attempted to insert " . scalar(@selected_biblionumbers) . " records, actually inserted: " . ($rows || 0);
+    my $rows = $dbh->do("
+        INSERT IGNORE INTO biblioitems (biblioitemnumber,biblionumber,volume,number,itemtype,isbn,issn,ean,publicationyear,publishercode,volumedate,volumedesc,collectiontitle,collectionissn,collectionvolume,editionstatement,editionresponsibility,timestamp,illus,pages,notes,size,place,lccn,url,cn_source,cn_class,cn_item,cn_suffix,cn_sort,agerestriction,totalissues)
+        SELECT biblioitemnumber,biblionumber,volume,number,itemtype,isbn,issn,ean,publicationyear,publishercode,volumedate,volumedesc,collectiontitle,collectionissn,collectionvolume,editionstatement,editionresponsibility,NULLIF(timestamp, '') AS timestamp,illus,pages,notes,size,place,lccn,url,cn_source,cn_class,cn_item,cn_suffix,cn_sort,agerestriction,totalissues 
+        FROM deletedbiblioitems dbi
+        WHERE dbi.biblionumber IN ($bib_placeholders)
+    ", undef, @selected_biblionumbers);
+    warn "BIBLIOITEMS: Attempted to insert " . scalar(@selected_biblionumbers) . " records, actually inserted: " . ($rows || 0);
 } catch {
-    die "BIBLIOITEMS INSERT FAILED: $_";
+    die "BIBLIOITEMS INSERT FAILED: $_";
 };
 
 # Restore metadata records - DON'T restore the ID, let MySQL generate it
 try {
-    my $rows = $dbh->do("
-        INSERT INTO biblio_metadata (biblionumber, format, `schema`, metadata, timestamp)
-        SELECT biblionumber, format, `schema`, metadata, timestamp 
-        FROM deletedbiblio_metadata dbm
-        WHERE dbm.biblionumber IN ($bib_placeholders)
-        AND NOT EXISTS (
-            SELECT 1 FROM biblio_metadata bm 
-            WHERE bm.biblionumber = dbm.biblionumber
-        )
-    ", undef, @selected_biblionumbers);
-    warn "BIBLIO_METADATA: Attempted to insert " . scalar(@selected_biblionumbers) . " records, actually inserted: " . ($rows || 0);
+    my $rows = $dbh->do("
+        INSERT INTO biblio_metadata (biblionumber, format, `schema`, metadata, timestamp)
+        SELECT biblionumber, format, `schema`, metadata, NULLIF(timestamp, '') AS timestamp
+        FROM deletedbiblio_metadata dbm
+        WHERE dbm.biblionumber IN ($bib_placeholders)
+        AND NOT EXISTS (
+            SELECT 1 FROM biblio_metadata bm 
+            WHERE bm.biblionumber = dbm.biblionumber
+        )
+    ", undef, @selected_biblionumbers);
+    warn "BIBLIO_METADATA: Attempted to insert " . scalar(@selected_biblionumbers) . " records, actually inserted: " . ($rows || 0);
 } catch {
-    die "BIBLIO_METADATA INSERT FAILED: $_";
+    die "BIBLIO_METADATA INSERT FAILED: $_";
 };
         
         # Check for and rename duplicate barcodes before restoring items
@@ -359,15 +359,15 @@ try {
 		", undef, @selected_itemnumbers);
 
         # Restore items
-        try {
-            $dbh->do("
-                INSERT INTO items (itemnumber,biblionumber,biblioitemnumber,barcode,bookable,dateaccessioned,booksellerid,homebranch,price,replacementprice,replacementpricedate,datelastborrowed,datelastseen,stack,notforloan,damaged,damaged_on,itemlost,itemlost_on,withdrawn,withdrawn_on,itemcallnumber,coded_location_qualifier,issues,renewals,localuse,reserves,restricted,itemnotes,itemnotes_nonpublic,holdingbranch,timestamp,deleted_on,location,permanent_location,onloan,cn_source,cn_sort,ccode,materials,uri,itype,more_subfields_xml,enumchron,copynumber,stocknumber,new_status,exclude_from_local_holds_priority)
-                SELECT itemnumber,biblionumber,biblioitemnumber,barcode,bookable,dateaccessioned,booksellerid,homebranch,price,replacementprice,replacementpricedate,datelastborrowed,datelastseen,stack,notforloan,damaged,damaged_on,itemlost,itemlost_on,withdrawn,withdrawn_on,itemcallnumber,coded_location_qualifier,issues,renewals,localuse,reserves,restricted,itemnotes,itemnotes_nonpublic,holdingbranch,timestamp,deleted_on,location,permanent_location,onloan,cn_source,cn_sort,ccode,materials,uri,itype,more_subfields_xml,enumchron,copynumber,stocknumber,new_status,exclude_from_local_holds_priority
-                FROM deleteditems
-                WHERE itemnumber IN ($item_placeholders)
-            ", undef, @selected_itemnumbers);
-        } catch {
-            die "ITEMS INSERT FAILED: $_";
+try {
+            $dbh->do("
+                INSERT INTO items (itemnumber,biblionumber,biblioitemnumber,barcode,bookable,dateaccessioned,booksellerid,homebranch,price,replacementprice,replacementpricedate,datelastborrowed,datelastseen,stack,notforloan,damaged,damaged_on,itemlost,itemlost_on,withdrawn,withdrawn_on,itemcallnumber,coded_location_qualifier,issues,renewals,localuse,reserves,restricted,itemnotes,itemnotes_nonpublic,holdingbranch,timestamp,deleted_on,location,permanent_location,onloan,cn_source,cn_sort,ccode,materials,uri,itype,more_subfields_xml,enumchron,copynumber,stocknumber,new_status,exclude_from_local_holds_priority)
+                SELECT itemnumber,biblionumber,biblioitemnumber,barcode,bookable,NULLIF(dateaccessioned, '') AS dateaccessioned,booksellerid,homebranch,price,replacementprice,NULLIF(replacementpricedate, '') AS replacementpricedate,NULLIF(datelastborrowed, '') AS datelastborrowed,NULLIF(datelastseen, '') AS datelastseen,stack,notforloan,damaged,NULLIF(damaged_on, '') AS damaged_on**,itemlost,NULLIF(itemlost_on, '') AS itemlost_on,withdrawn,NULLIF(withdrawn_on, '') AS withdrawn_on**,itemcallnumber,coded_location_qualifier,issues,renewals,localuse,reserves,restricted,itemnotes,itemnotes_nonpublic,holdingbranch,NULLIF(timestamp, '') AS timestamp,deleted_on,location,permanent_location,onloan,cn_source,cn_sort,ccode,materials,uri,itype,more_subfields_xml,enumchron,copynumber,stocknumber,new_status,exclude_from_local_holds_priority
+                FROM deleteditems
+                WHERE itemnumber IN ($item_placeholders)
+            ", undef, @selected_itemnumbers);
+        } catch {
+            die "ITEMS INSERT FAILED: $_";
         };
 
 		# Clean up deleted items FIRST
