@@ -6,7 +6,7 @@ Pair with the below JQuery in IntranetUserJS to have quicklinks to the Tool in C
 ```
 $(document).ready(function() {
     var newItemRecoveryButton = '<li>' +
-    '<a class="circ-button" href="https://staff.your-domain.com/cgi-bin/koha/plugins/run.pl?class=Koha%3A%3APlugin%3A%3AItemRecovery&method=tool">' +
+    '<a class="circ-button" href="/cgi-bin/koha/plugins/run.pl?class=Koha%3A%3APlugin%3A%3AItemRecovery&method=tool">' +
     '<i class="fa fa-undo"></i> Item Recovery' +
     '</a>' +
     '</li>';
@@ -20,7 +20,7 @@ $(document).ready(function() {
 $(document).ready(function() {
   if ($(".problem.ret_badbarcode:contains('No item with barcode:')")) {
       $('.problem.ret_badbarcode').append('<div>' +
-    '<a class="btn btn-default approve" href="https://staff.your-domain.com/cgi-bin/koha/plugins/run.pl?class=Koha%3A%3APlugin%3A%3AItemRecovery&method=tool">' +
+    '<a class="btn btn-default approve" href="/cgi-bin/koha/plugins/run.pl?class=Koha%3A%3APlugin%3A%3AItemRecovery&method=tool">' +
     '<i class="fa fa-undo"></i> Fast Add Recovery Tool' +
     '</a>' +
     '</div>');
@@ -31,7 +31,7 @@ $(document).ready(function() {
 $(document).ready(function() {
   if ($(".circ_impossible:contains('he barcode was not found:')")) {
       $('#circ_impossible > ul > li > div').prepend('<div>' +
-    '<a class="btn btn-default approve" href="https://staff.your-domain.com/cgi-bin/koha/plugins/run.pl?class=Koha%3A%3APlugin%3A%3AItemRecovery&method=tool">' +
+    '<a class="btn btn-default approve" href="/cgi-bin/koha/plugins/run.pl?class=Koha%3A%3APlugin%3A%3AItemRecovery&method=tool">' +
     '<i class="fa fa-undo"></i> Fast Add Recovery Tool' +
     '</a>' +
     '</div>');
